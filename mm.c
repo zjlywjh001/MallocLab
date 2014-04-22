@@ -36,15 +36,15 @@
  ********************************************************/
 team_t team = {
   /* Team name */
-  "",
+  "Tranquil",
   /* First member's full name */
-  "",
+  "Dylan Shepard",
   /* First member's email address */
-  "",
+  "dylanshepard@me.com",
   /* Second member's full name (leave blank if none) */
-  "",
+  "Max Harris",
   /* Second member's email address (leave blank if none) */
-  ""
+  "mharris@colorado.edu"
 };
 
 /////////////////////////////////////////////////////////////////////////////

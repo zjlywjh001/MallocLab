@@ -189,6 +189,10 @@ static void *coalesce(void *bp)
 //
 void *mm_malloc(size_t size) 
 {
+char *cbp;
+for (cbp = start; GETALLOC(BLKHDR(cbp) || GETSIZE(BLKHDR(cbp))) < size; cbp = cbp + GETSIZE(BLKHDR(cbp)))
+        {
+        }
   //
   // You need to provide this
   //

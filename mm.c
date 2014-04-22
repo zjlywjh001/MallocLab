@@ -68,9 +68,9 @@ static inline int MAX(int x, int y) {
 // Pack a size and allocated bit into a word
 // We mask of the "alloc" field to insure only
 // the lower bit is used
-//
+// // THe book doesn't mask the alloc field...
 static inline size_t PACK(size_t size, int alloc) {
-  return ((size) | (alloc & 0x1));
+  return ((size) | (alloc));
 }
 
 //
@@ -98,7 +98,7 @@ static inline int GET_ALLOC( void *p  ) {
 //
 static inline void *HDRP(void *bp) {
 
-  return ( (char *)bp) - WSIZE;
+  return ((char *)(bp) - WSIZE);
 }
 static inline void *FTRP(void *bp) {
   return ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE);
@@ -137,10 +137,17 @@ static void checkblock(void *bp);
 //
 int mm_init(void) 
 {
-  //
-  // You need to provide this
-  //
-  return 0;
+        if ((heap_listp = mem_sbrk(4*WSIZE)) == NULL)
+                return -1;
+        PUT(heap_listp, 0); //alignment padding
+        PUT(heap_listp+WSIZE, PACK(OVERHEAD, 1)); //pre header
+        PUT(heap_listp+DSIZE, PACK(OVERHEAD, 1)); //pre footer
+        PUT(heap_listp+WSIZE+DSIZE, PACK(0, 1)); //post footer
+        heap_listp += DSIZE;
+
+        if (extend_heap(CHUNKSIZE/WSIZE) == NULL) //Extend with free block of CHUNKSIZE bytes
+                return -1;
+        return 0;
 }
 
 
@@ -149,10 +156,20 @@ int mm_init(void)
 //
 static void *extend_heap(size_t words) 
 {
-  //
-  // You need to provide this
-  //
-  return NULL;
+        char *bp;
+        size_t size;
+        
+        size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+        //Allocate even number of words to maintain alignment
+        if ((int)(bp = mem_sbrk(size)) < 0)
+                return NULL;
+
+        // Initializef ree block header/footer and epilogue header
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+        PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
+
+        return coalesce(bp);
 }
 
 
@@ -161,8 +178,15 @@ static void *extend_heap(size_t words)
 //
 // find_fit - Find a fit for a block with asize bytes 
 //
-static void *find_fit(size_t asize)
+static void *find_fit(size_t adjsize)
 {
+        void *bp;
+
+        for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+                if (!GET_ALLOC(HDRP(bp)) && (adjsize <= GET_SIZE(HDRP(bp)))) {
+                        return bp; //Once it finds a fit, it places it.
+                }
+        }
   return NULL; /* no fit */
 }
 
@@ -171,9 +195,10 @@ static void *find_fit(size_t asize)
 //
 void mm_free(void *bp)
 {
-  //
-  // You need to provide this
-  //
+        size_t size = GET_SIZE(HDRP(bp));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+        coalesce(bp);
 }
 
 //
@@ -181,7 +206,30 @@ void mm_free(void *bp)
 //
 static void *coalesce(void *bp) 
 {
-  return bp;
+        size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+        size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+        size_t size = GET_SIZE(HDRP(bp));
+        if (prev_alloc && next_alloc) {
+                return bp;
+        }
+        else if (prev_alloc && !next_alloc) {
+                size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+                PUT(HDRP(bp), PACK(size, 0));
+                PUT(FTRP(bp), PACK(size, 0));
+                return bp;
+        }
+        else if (!prev_alloc && next_alloc) {
+                size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+                PUT(FTRP(bp), PACK(size, 0));
+                PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+                return(PREV_BLKP(bp));
+        }
+        else {
+                size =+ GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+                PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+                PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+                return (PREV_BLKP(bp));
+        }
 }
 
 //
@@ -189,14 +237,30 @@ static void *coalesce(void *bp)
 //
 void *mm_malloc(size_t size) 
 {
-char *cbp;
-for (cbp = start; GETALLOC(BLKHDR(cbp) || GETSIZE(BLKHDR(cbp))) < size; cbp = cbp + GETSIZE(BLKHDR(cbp)))
-        {
+        size_t adjsize;
+        size_t extendsize;
+        char *bp;
+
+        if (size <= 0)
+                return NULL;
+        //ironic
+
+        if (size <= DSIZE) //Adjust block size to include overhead and alignment.
+                adjsize = DSIZE + OVERHEAD;
+        else
+                adjsize = DSIZE * ((size + (OVERHEAD) + (DSIZE-1)) / DSIZE);
+
+        if ((bp = find_fit(adjsize)) != NULL) { 
+                //Search free list for a fitting chunk.
+                place(bp, adjsize);
+                return bp;
         }
-  //
-  // You need to provide this
-  //
-  return NULL;
+                //No fit found. Get more memory and move the block.
+        extendsize = MAX(adjsize, CHUNKSIZE);
+        if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
+                return NULL;
+        place(bp, adjsize);
+        return bp;
 } 
 
 //
@@ -206,8 +270,20 @@ for (cbp = start; GETALLOC(BLKHDR(cbp) || GETSIZE(BLKHDR(cbp))) < size; cbp = cb
 // place - Place block of asize bytes at start of free block bp 
 //         and split if remainder would be at least minimum block size
 //
-static void place(void *bp, size_t asize)
+static void place(void *bp, size_t adjsize)
 {
+        size_t chunksize = GET_SIZE(HDRP(bp));
+        if ((chunksize - adjsize) >= (DSIZE + OVERHEAD)) {
+                PUT(HDRP(bp), PACK(adjsize, 1));
+                PUT(FTRP(bp), PACK(adjsize, 1));
+                bp = NEXT_BLKP(bp);
+                PUT(HDRP(bp), PACK(chunksize - adjsize, 0));
+                PUT(FTRP(bp), PACK(chunksize - adjsize, 0));
+        }
+        else {
+                PUT(HDRP(bp), PACK(chunksize, 1));
+                PUT(FTRP(bp), PACK(chunksize, 1));
+        }
 }
 
 

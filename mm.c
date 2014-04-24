@@ -140,9 +140,9 @@ int mm_init(void)
         if ((heap_listp = mem_sbrk(4*WSIZE)) == (void *)-1)
                 return -1;
         PUT(heap_listp, 0);
-        PUT(heap_listp+(1*WSIZE), PACK(DSIZE,1));
-        PUT(heap_listp+(2*WSIZE), PACK(DSIZE,1));
-        PUT(heap_listp+(3*WSIZE), PACK(0,1));
+        PUT(heap_listp+(1*WSIZE), PACK(DSIZE, 1));
+        PUT(heap_listp+(2*WSIZE), PACK(DSIZE, 1));
+        PUT(heap_listp+(3*WSIZE), PACK(0, 1));
         heap_listp += (2*WSIZE);
         if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
                 return -1;
@@ -177,9 +177,9 @@ static void *extend_heap(size_t words)
 static void *find_fit(size_t asize)
 {
         void *bp;
-        for (bp = heap_listp; GET_SIZE(HDRP(bp))>0; bp=NEXT_BLKP(bp))
+        for (bp = heap_listp; GET_SIZE(HDRP(bp))>0; bp = NEXT_BLKP(bp))
         {
-                if(!GET_ALLOC(HDRP(bp))&&(asize<-GET_SIZE(HDRP(bp))))
+                if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
                         return bp;
         }
   return NULL; /* no fit */

@@ -159,13 +159,17 @@ static void *extend_heap(size_t words)
         size_t size;
 
         size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
+        //Sets size to the size of words
         if ((long)(bp = mem_sbrk(size)) == -1)
                 return NULL;
+        //If heap cannot be extended return NULL
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(NEXT_BLKP(bp)), PACK(0,1));
+        //Otherwise, extend the heap 'size' length
 
         return coalesce(bp);
+        //coalesce at the end of extending the heap
 }
 
 
@@ -178,11 +182,14 @@ static void *find_fit(size_t asize)
 {
         void *bp;
         for (bp = heap_listp; GET_SIZE(HDRP(bp))>0; bp = NEXT_BLKP(bp))
+                //Goes through each block of given memory
         {
+
                 if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
                         return bp;
+                //If an empty block of size appears, it returns the position of said block
         }
-  return NULL; /* no fit */
+  return NULL; // Indicates that a fit wasn't found
 }
 
 // 
@@ -194,6 +201,7 @@ void mm_free(void *bp)
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
         coalesce(bp);
+        //With a given block, sets it to be removed, and then coalesce's the rest
 }
 
 //
@@ -226,6 +234,9 @@ static void *coalesce(void *bp)
                 PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
                 bp = PREV_BLKP(bp);
         }
+
+        //Multiple conditions to just move all of the taken block of memory into
+        //the best arrangement with the given linked list
   return bp;
 }
 
@@ -239,18 +250,23 @@ void *mm_malloc(size_t size)
         char *bp;
         if(size == 0)
                 return NULL;
+        //If malloc'd with 0, it won't allocate anything
 
         if (size <= DSIZE)
                 asize=2*DSIZE;
         else
                 asize = DSIZE*((size+(DSIZE)+(DSIZE-1))/DSIZE);
 
+        //Sets adjusted size to be large enough to fit the block plus headers
+
         if ((bp = find_fit(asize))!=NULL){
                 place(bp, asize);
                 return bp;
+                //Finds a fit and places the block pointer into it
         }
         extendsize = MAX(asize, CHUNKSIZE);
         if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
+                //If heap cannot be extended, Malloc won't allocate it
                 return NULL;
         place(bp,asize);
         return bp;
@@ -273,6 +289,8 @@ static void place(void *bp, size_t asize)
                 bp = NEXT_BLKP(bp);
                 PUT(HDRP(bp), PACK(csize-asize, 0));
                 PUT(FTRP(bp), PACK(csize-asize, 0));
+                //Sets the previous pointer and the next pointer to show that bp
+                //is now a block in the memory
         }
         else {
                 PUT(HDRP(bp), PACK(csize, 1));
